@@ -1,0 +1,5 @@
+<div class="container mt-5">
+  <h2>Iniciar Sesión</h2>
+  <button class="btn btn-primary" (click)="loginWithGoogle()">Iniciar sesión con Google</button>
+  <p *ngIf="errorMessage" class="text-danger">{{ errorMessage }}</p>
+</div>
