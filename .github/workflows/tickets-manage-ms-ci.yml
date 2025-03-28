@@ -1,0 +1,24 @@
+name: CI - Tickets Manage
+
+on:
+  push:
+    branches: ['master']
+    paths:
+      - 'tickets-manage-ms/**'
+      - '.github/workflows/tickets-manage-ms-ci.yml'
+      - '.github/workflows/docker-build-push.yml' 
+  pull_request:
+    branches: ['master']
+    paths:
+      - 'tickets-manage-ms/**'
+      - '.github/workflows/tickets-manage-ms-ci.yml'
+      - '.github/workflows/docker-build-push.yml'
+
+jobs:
+  call-reusable-build:
+    uses: ./.github/workflows/docker-build-push.yml 
+    with:
+      service_name: tickets-manage-ms
+      service_context: ./tickets-manage-ms
+      docker_tag: ${{ vars.user }}/${{ vars.app }}:tickets-manage-ms
+    secrets: inherit 

@@ -1,0 +1,60 @@
+services:
+
+  frontend:
+    container_name: frontend
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    image: sgalle16/legosplatform:frontend
+    ports:
+      - "4200:4200"
+    networks:
+      - lego-network
+
+  api-gateway:
+    container_name: api_gateway
+    build:
+      context: ./api-gateway
+      dockerfile: Dockerfile
+    image: sgalle16/legosplatform:api-gateway
+    ports:
+      - "3000:3000"
+    networks:
+      - lego-network
+
+  api-tickets:
+    container_name: api_tickets
+    build:
+      context: ./api-tickets
+      dockerfile: Dockerfile
+    image: sgalle16/legosplatform:api-tickets
+    ports:
+      - "5002:5002"
+    networks:
+      - lego-network
+
+  tickets-manage-ms:
+    container_name: tickets_manage
+    build: 
+      context: ./tickets-manage-ms
+      dockerfile: Dockerfile
+    image: sgalle16/legosplatform:tickets-manage-ms
+    ports:
+      - "5000:5000"
+    environment:
+      GOOGLE_APPLICATION_CREDENTIALS: /root/.config/gcloud/application_default_credentials.json
+      GOOGLE_CLOUD_PROJECT: auth-5b07d
+    volumes:
+      - ~/.config/gcloud/application_default_credentials.json:/root/.config/gcloud/application_default_credentials.json:ro
+    networks:
+      - lego-network
+    depends_on:
+      - api-gateway
+      - frontend
+      - api-tickets
+
+networks:
+  lego-network:
+    name: lego-network
+    driver: bridge
+

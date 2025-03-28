@@ -1,0 +1,24 @@
+name: CI - API Tickets
+
+on:
+  push:
+    branches: ['master']
+    paths:
+      - 'api-tickets/**'
+      - '.github/workflows/api-tickets-ci.yml'
+      - '.github/workflows/docker-build-push.yml'
+  pull_request:
+    branches: ['master']
+    paths:
+      - 'api-tickets/**'
+      - '.github/workflows/api-tickets-ci.yml'
+      - '.github/workflows/docker-build-push.yml'
+
+jobs:
+  call-reusable-build:
+    uses: ./.github/workflows/docker-build-push.yml
+    with:
+      service_name: api-tickets
+      service_context: ./api-tickets
+      docker_tag: ${{ vars.user }}/${{ vars.app }}:api-tickets
+    secrets: inherit
