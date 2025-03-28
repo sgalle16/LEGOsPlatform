@@ -1,0 +1,20 @@
+{
+  "name": "api_rest",
+  "version": "1.0.0",
+  "description": "API rest para habilitar comunicación entre el front y los microservicios backend",
+  "main": "apiGateway.js",
+  "scripts": {
+    "start": "nodemon apiGateway.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Juan Mena",
+  "license": "ISC",
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.21.2",
+    "http-proxy-middleware": "^3.0.3"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.9"
+  }
+}
