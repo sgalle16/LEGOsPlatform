@@ -90,6 +90,25 @@ services:
     networks:
       - lego-network
 
+  postgres-db:
+        image: postgres:latest
+        container_name: postgres-db
+        restart: unless-stopped
+        environment:
+          POSTGRES_DB: ticketsdb
+          POSTGRES_USER: devuser
+          POSTGRES_PASSWORD: devpassword
+        ports:
+          - "5432:5432" 
+        volumes:
+          - postgres_data:/var/lib/postgresql/data
+          - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+        networks:
+          - lego-network
+
+volumes:
+  postgres_data:
+    driver: local
 
 networks:
   lego-network:

@@ -4,11 +4,11 @@ import type { FlaskValidationResponse, TicketValidationResult } from '../types';
 
 dotenv.config();
 
-//const flaskApiUrl = process.env.FLASK_TICKET_API_URL || "http://localhost:5002/api/ticket" ;
-const flaskApiUrl = process.env.FLASK_TICKET_API_URL || "http://api-tickets:5002/api/ticket" ;
+//const ticketsApiUrl = process.env.TICKETS_API_URL || "http://localhost:5002/api/ticket" ;
+const ticketsApiUrl = process.env.TICKETS_API_URL || "http://api-tickets:5002/api/ticket" ;
 
-if (!flaskApiUrl) {
-  console.error("[Ticket Validation] FATAL: FLASK_TICKET_API_URL is not defined in .env");
+if (!ticketsApiUrl) {
+  console.error("[Ticket Validation] FATAL: TICKET_API_URL is not defined in .env");
   process.exit(1);
 }
 
@@ -16,10 +16,10 @@ export const validateTicketWithFlask = async (
     userId: string, // userId como STRING
     ticketId: string
 ): Promise<TicketValidationResult> => {
-  console.log(`[Ticket Validation] Validating ticket ${ticketId} for owner ${userId} via ${flaskApiUrl}...`);
+  console.log(`[Ticket Validation] Validating ticket ${ticketId} for owner ${userId} via ${ticketsApiUrl}...`);
 
   try {
-    const response = await axios.get<FlaskValidationResponse>(flaskApiUrl, {
+    const response = await axios.get<FlaskValidationResponse>(ticketsApiUrl, {
       params: {
         id: userId, // El param 'id' que espera Flask
         ticket_id: ticketId,
