@@ -1,13 +1,17 @@
-// src/index.ts (renamed for clarity, or keep app.ts)
 import dotenv from 'dotenv';
 dotenv.config();
 
 import { Kafka, logLevel as KafkaLogLevels } from 'kafkajs'; // Import Kafka
 import './config/firebase'; // Initialize Firebase Admin SDK
+
+// db utils
+import { saveValidationResult } from './services/databaseService'; 
+import { testDbConnection, closeDbPool } from './config/database'; 
+
 // Assuming these services remain largely the same internally
 import { verifyFirebaseToken } from './services/firebaseAuthService';
 import { validateTicketWithFlask } from './services/ticketValidationService';
-// Keep your existing types
+// types 
 import type { ApiGatewayData, FirebaseDecodedToken, TicketValidationResult } from './types';
 
 // --- Kafka Configuration ---
@@ -29,15 +33,16 @@ const kafka = new Kafka({
 
 const consumer = kafka.consumer({ groupId: KAFKA_GROUP_ID });
 let isConsumerRunning = false;
+let isShuttingDown = false;
 
 // --- Lógica Principal de Procesamiento por Mensaje ---
-// This function replaces the core logic of processTicketCycle
 async function processTicketMessage(messagePayload: string, messageOffset: string): Promise<void> {
-    let stepFailed: 'parsing' | 'firebase_auth' | 'ticket_validation' | undefined = undefined;
+    let stepFailed: 'parsing' | 'firebase_auth' | 'ticket_validation' | 'database_save' | undefined = undefined;
     let errorMessage: string | undefined = undefined;
     let ticketData: ApiGatewayData | null = null;
     let decodedFirebaseToken: FirebaseDecodedToken | null = null;
-
+    let ticketValidationResult: TicketValidationResult | null = null
+    
     console.log(`[Consumer] Processing message at offset ${messageOffset}`);
 
     try {
@@ -60,11 +65,24 @@ async function processTicketMessage(messagePayload: string, messageOffset: strin
         stepFailed = 'ticket_validation';
         const ownerIdString = String(ticketData.id); // Convertir ID a string
         const ticketValidationResult = await validateTicketWithFlask(ownerIdString, ticketData.ticketNumber);
+        
+        // --- Paso 3: Guardar en Base de Datos ---
+        stepFailed = 'database_save';
+        console.log("[Consumer] Attempting to save validation result to database...");
+        await saveValidationResult({
+            // Pass the correct data structure to saveValidationResult
+            initialData: ticketData, // Pass the data 
+            firebaseUser: decodedFirebaseToken,
+            validationResult: ticketValidationResult,
+        });
+        console.log("[Consumer] Validation result saved to database successfully.");
 
         // --- Procesamiento Exitoso (del mensaje) ---
         console.log(`[Consumer] Message processed successfully for ticket ID: ${ticketData.id}`);
         console.log(`[Consumer] --> Ticket Validation Status: ${ticketValidationResult.status}`);
         console.log(`[Consumer] --> Details: ${ticketValidationResult.details}`);
+        
+        
 
     } catch (error: any) {
         // --- Fallo en el procesamiento del mensaje ---
@@ -89,7 +107,18 @@ async function startService() {
     console.log(`--- Kafka Brokers: ${KAFKA_BROKERS.join(', ')} ---`);
     console.log('---------------------------------------------');
 
+
+
     try {
+        // Probar Conexión a BD ---
+        console.log("[Service Init] Testing database connection...");
+        const dbReady = await testDbConnection();
+        if (!dbReady) {
+            console.error("[Service Init] Database connection failed. Exiting.");
+            //process.exit(1); // No continuar si la BD no está lista
+        }
+        console.log("[Service Init] Database connection successful.");
+
         // Connect the consumer
         await consumer.connect();
         console.log('[Consumer] Connected to Kafka brokers.');
@@ -119,7 +148,8 @@ async function startService() {
         console.log('[Consumer] Consumer is running and waiting for messages...');
 
     } catch (error) {
-        console.error('[Consumer] Failed to start Kafka consumer:', error);
+        console.error('[Consumer] Failed to start Kafka consumer or test DB:', error);
+        await closeDbPool().catch(e => console.error("Error closing DB pool during failed startup:", e));
         process.exit(1); // Exit if we can't connect/subscribe
     }
 }
@@ -127,6 +157,7 @@ async function startService() {
 // --- Manejo de Cierre Limpio ---
 async function shutdownService(signal: string) {
     console.log(`\n[Service] Received ${signal}. Shutting down gracefully...`);
+    // 1. Desconectar Kafka Consumer
     if (isConsumerRunning) {
         try {
             await consumer.disconnect();
@@ -140,8 +171,12 @@ async function shutdownService(signal: string) {
          console.log('[Consumer] Consumer was not running, skipping disconnect.');
     }
 
-    // Add any other cleanup needed (e.g., database connections)
-
+    // 2. Cerrar Pool de Base de Datos
+    try {
+        await closeDbPool();
+    } catch(dbError) {
+        console.error('[Service] Error closing database pool:', dbError);
+    }
     console.log('[Service] Shutdown complete. Exiting.');
     process.exit(0);
 }
