@@ -38,7 +38,7 @@ export class LoginComponent {
       Swal.fire({
         icon: 'success',
         title: '¡Éxito!',
-        text: 'La operación se realizó correctamente.',
+        text: 'Usuario autenticado correctamente',
       })
       result.user.getIdToken()
       .then((token) => {

@@ -1,5 +1,28 @@
 <div class="container">
-  <p>LEGO Portal Boletas</p>
-  <button class="btn btn-primary" (click)='venderBoleta()'>Vender</button>
-  <button class="btn btn-secondary" (click)='consultarEstado()'>Consultar</button>
+  <h1>LEGO Portal Boletas</h1>
+  <!-- <button class="btn btn-primary" (click)='venderBoleta()'>Vender</button>-->
+  <button class="btn btn-secondary" (click)='consultarEstado()'>Consultar</button> 
+  <div id="carouselExample" class="carousel slide">
+    <div class="carousel-inner">
+      <div class="carousel-item active" >
+        <img src="https://enntra.com/wp-content/uploads/2024/12/bca01208-8052-4471-99b6-ba34e3e93dd4_4-1-edited-1.jpg" (click)='venderBoleta("maluma")' class="d-block w-100" alt="...">
+      </div>
+      <div class="carousel-item" >
+        <img src="https://enntra.com/wp-content/uploads/2025/02/5-detalle-evento_0-edited-600x400.webp" (click)='venderBoleta("rigida")' class="d-block w-100" alt="...">
+      </div>
+      <div class="carousel-item" >
+        <img src="https://enntra.com/wp-content/uploads/2025/03/imagen-de-los-eventos-edited-1-1024x683.webp" (click)='venderBoleta("duki")' class="d-block w-100" alt="...">
+      </div>
+    </div>
+    <button class="carousel-control-prev" type="button" data-bs-target="#carouselExample" data-bs-slide="prev">
+      <span class="carousel-control-prev-icon" aria-hidden="true"></span>
+      <span class="visually-hidden">Previous</span>
+    </button>
+    <button class="carousel-control-next" type="button" data-bs-target="#carouselExample" data-bs-slide="next">
+      <span class="carousel-control-next-icon" aria-hidden="true"></span>
+      <span class="visually-hidden">Next</span>
+    </button>
+  </div>
+
 </div>
+

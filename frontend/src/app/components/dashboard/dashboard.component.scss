@@ -1,5 +1,10 @@
 .container{
-  display: grid;
+
   place-items: center; /* Centra en ambas direcciones */
   height: 100vh;
+}
+
+#carouselExample{
+  width: 50%;
+  height: 20%;
 }
