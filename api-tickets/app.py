@@ -28,7 +28,26 @@ tickets = [
         "user_id": "1777778922",
         "event": "Obra de Teatro",
         "date": "2025-06-15"
+    },
+    {
+        "ticket_id": "AB21d15B",
+        "user_id": "70702020",
+        "event": "Concierto Maluma",
+        "date": "2025-07-20"
+    },
+    {
+        "ticket_id": "AAA123M25",
+        "user_id": "12345678",
+        "event": "Concierto fuerza rigida",
+        "date": "2025-08-25"
+    },
+    {
+        "ticket_id": "BBB123M25",
+        "user_id": "987654321",
+        "event": "Concierto fuerza rigida",
+        "date": "2025-09-30"
     }
+    
 ]
 
 

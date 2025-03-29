@@ -1,98 +1,147 @@
-// src/app.ts
+// src/index.ts (renamed for clarity, or keep app.ts)
 import dotenv from 'dotenv';
 dotenv.config();
 
-import './config/firebase';
-import { fetchInitialData } from './services/apiGatewayClient';
+import { Kafka, logLevel as KafkaLogLevels } from 'kafkajs'; // Import Kafka
+import './config/firebase'; // Initialize Firebase Admin SDK
+// Assuming these services remain largely the same internally
 import { verifyFirebaseToken } from './services/firebaseAuthService';
 import { validateTicketWithFlask } from './services/ticketValidationService';
-import type { ProcessingResult, ApiGatewayData, FirebaseDecodedToken, TicketValidationResult } from './types';
+// Keep your existing types
+import type { ApiGatewayData, FirebaseDecodedToken, TicketValidationResult } from './types';
 
-// --- Configuración ---
-const pollingIntervalMs = parseInt(process.env.POLLING_INTERVAL_MS || '10000', 10); // Default 10 secs
-let isProcessing = false; // Flag para evitar solapamiento
-let pollingTimer: NodeJS.Timeout | null = null;
+// --- Kafka Configuration ---
+const KAFKA_BROKERS = (process.env.KAFKA_BROKERS || 'kafka:9092').split(',');
+const KAFKA_CLIENT_ID = process.env.KAFKA_CLIENT_ID || 'ticket-processor-client';
+const KAFKA_GROUP_ID = process.env.KAFKA_GROUP_ID || 'ticket-processor-group'; // Crucial for consumers
+const KAFKA_TOPIC_TICKETS = process.env.KAFKA_TOPIC_TICKETS || 'ticket-generated'; // Topic to consume from
 
-// --- Lógica Principal del Ciclo de Procesamiento ---
-async function processTicketCycle(): Promise<void> {
-    if (isProcessing) {
-        console.log('[Polling] Skipping cycle, previous one still running.');
-        return;
-    }
+const kafka = new Kafka({
+    clientId: KAFKA_CLIENT_ID,
+    brokers: KAFKA_BROKERS,
+    logLevel: KafkaLogLevels.INFO, // Adjust as needed (WARN, ERROR, INFO, DEBUG)
+    // Add retry logic if desired for broker connection issues
+    // retry: {
+    //   initialRetryTime: 300,
+    //   retries: 5
+    // }
+});
 
-    isProcessing = true;
-    console.log(`[Polling] Starting new processing cycle at ${new Date().toISOString()}`);
+const consumer = kafka.consumer({ groupId: KAFKA_GROUP_ID });
+let isConsumerRunning = false;
 
-    let initialData: ApiGatewayData | null = null;
-    let decodedFirebaseToken: FirebaseDecodedToken | null = null;
-    let stepFailed: ProcessingResult['stepFailed'] = undefined;
+// --- Lógica Principal de Procesamiento por Mensaje ---
+// This function replaces the core logic of processTicketCycle
+async function processTicketMessage(messagePayload: string, messageOffset: string): Promise<void> {
+    let stepFailed: 'parsing' | 'firebase_auth' | 'ticket_validation' | undefined = undefined;
     let errorMessage: string | undefined = undefined;
+    let ticketData: ApiGatewayData | null = null;
+    let decodedFirebaseToken: FirebaseDecodedToken | null = null;
+
+    console.log(`[Consumer] Processing message at offset ${messageOffset}`);
 
     try {
-        // --- Paso 1: Fetch ---
-        stepFailed = 'fetch';
-        initialData = await fetchInitialData();
+        // --- Paso 0: Parse ---
+        stepFailed = 'parsing';
+        ticketData = JSON.parse(messagePayload) as ApiGatewayData;
+        // Basic validation of the parsed data structure
+        if (!ticketData || typeof ticketData !== 'object' || !ticketData.id || !ticketData.token || !ticketData.ticketNumber) {
+            throw new Error('Invalid or incomplete ticket data structure received.');
+        }
+        console.log(`[Consumer] Parsed ticket data for ID: ${ticketData.id}, User: ${ticketData.user}`);
 
-        // --- Paso 2: Firebase Auth ---
+        // --- Paso 1: Firebase Auth ---
         stepFailed = 'firebase_auth';
-        decodedFirebaseToken = await verifyFirebaseToken(initialData.token);
-        console.log(`[Polling] Firebase token validated for UID: ${decodedFirebaseToken.uid}`);
+        decodedFirebaseToken = await verifyFirebaseToken(ticketData.token);
+        console.log(`[Consumer] Firebase token validated for UID: ${decodedFirebaseToken.uid} (matches user: ${ticketData.user})`);
+        // Optional: Add check if decodedFirebaseToken.uid corresponds to ticketData.user if needed
 
-        // --- Paso 3: Ticket Validation (API Flask) ---
+        // --- Paso 2: Ticket Validation (API Flask) ---
         stepFailed = 'ticket_validation';
-        const ownerIdString = String(initialData.id); // Convertir ID a string
-        const ticketValidationResult = await validateTicketWithFlask(ownerIdString, initialData.ticketNumber);
+        const ownerIdString = String(ticketData.id); // Convertir ID a string
+        const ticketValidationResult = await validateTicketWithFlask(ownerIdString, ticketData.ticketNumber);
 
-        // --- Procesamiento Exitoso (del ciclo) ---
-        console.log(`[Polling] Cycle completed. Ticket Validation Status: ${ticketValidationResult.status}`);
-        console.log(`[Polling] Details: ${ticketValidationResult.details}`);
-
-        // --- Punto de Possible Integración Kafka  ---
-        // Aquí podrías publicar el resultado (exito o fallo de validación del *ticket*) en Kafka
-        // const kafkaPayload = { /* ... datos relevantes ... */ };
-        // if (ticketValidationResult.status === 'validated') {
-        //    console.log('[Kafka] Publishing validated ticket event...');
-        //    // await kafkaProducer.send({ topic: 'ticket-validated', messages: [{ value: JSON.stringify(kafkaPayload) }] });
-        // } else {
-        //    console.log(`[Kafka] Publishing invalid ticket event (${ticketValidationResult.status})...`);
-        //    // await kafkaProducer.send({ topic: 'ticket-invalid', messages: [{ value: JSON.stringify(kafkaPayload) }] });
-        // }
-        // --- Fin Kafka ---
+        // --- Procesamiento Exitoso (del mensaje) ---
+        console.log(`[Consumer] Message processed successfully for ticket ID: ${ticketData.id}`);
+        console.log(`[Consumer] --> Ticket Validation Status: ${ticketValidationResult.status}`);
+        console.log(`[Consumer] --> Details: ${ticketValidationResult.details}`);
 
     } catch (error: any) {
-        // --- Fallo en el ciclo ---
+        // --- Fallo en el procesamiento del mensaje ---
         errorMessage = error.message;
-        console.error(`[Polling] ERROR during step '${stepFailed}': ${errorMessage}`);
-        // No detenemos el polling, lo intentará de nuevo en el siguiente intervalo
+        console.error(`[Consumer] ERROR processing message at offset ${messageOffset} during step '${stepFailed}': ${errorMessage}`);
+        // Log the problematic data (be careful with sensitive info like tokens in production logs)
+        console.error(`[Consumer] --> Failed Message Data (structure): ${JSON.stringify({id: ticketData?.id, user: ticketData?.user, ticketNumber: ticketData?.ticketNumber})}`);
+        // NOTE: This error typically won't stop the consumer. It will commit the offset
+        // and move to the next message unless configured otherwise or if the error is thrown out.
+        // Consider sending failed messages to a Dead Letter Queue (DLQ) topic for later analysis/retry.
     } finally {
-        isProcessing = false;
-        console.log('[Polling] Cycle finished.');
+         console.log(`[Consumer] Finished processing message at offset ${messageOffset}.`);
     }
 }
 
 // --- Inicio del Servicio ---
-function startService() {
+async function startService() {
     console.log('---------------------------------------------');
-    console.log('--- Ticket Processing Service Starting ---');
-    console.log(`--- Polling Interval: ${pollingIntervalMs} ms ---`);
+    console.log('--- Ticket Processing Service (Kafka Consumer) Starting ---');
+    console.log(`--- Consuming from Topic: ${KAFKA_TOPIC_TICKETS} ---`);
+    console.log(`--- Consumer Group ID: ${KAFKA_GROUP_ID} ---`);
+    console.log(`--- Kafka Brokers: ${KAFKA_BROKERS.join(', ')} ---`);
     console.log('---------------------------------------------');
 
-    // Ejecutar inmediatamente al inicio y luego establecer el intervalo
-    processTicketCycle(); // Ejecuta la primera vez
-    pollingTimer = setInterval(processTicketCycle, pollingIntervalMs); // Inicia el polling
+    try {
+        // Connect the consumer
+        await consumer.connect();
+        console.log('[Consumer] Connected to Kafka brokers.');
 
-    console.log('[Polling] Service started. Initial cycle triggered.');
+        // Subscribe to the topic
+        await consumer.subscribe({ topic: KAFKA_TOPIC_TICKETS, fromBeginning: false }); // false = only new messages
+        console.log(`[Consumer] Subscribed to topic: ${KAFKA_TOPIC_TICKETS}`);
+
+        // Start consuming messages
+        await consumer.run({
+            eachMessage: async ({ topic, partition, message }) => {
+                if (!message || !message.value) {
+                     console.warn(`[Consumer] Received empty message on topic ${topic} partition ${partition}. Skipping.`);
+                     return;
+                }
+                const messagePayload = message.value.toString();
+                const messageOffset = message.offset;
+
+                // Process the message using our dedicated function
+                await processTicketMessage(messagePayload, messageOffset);
+
+                // Note: Offsets are committed automatically by default based on successful
+                // completion of eachMessage unless autoCommit is disabled.
+            },
+        });
+        isConsumerRunning = true;
+        console.log('[Consumer] Consumer is running and waiting for messages...');
+
+    } catch (error) {
+        console.error('[Consumer] Failed to start Kafka consumer:', error);
+        process.exit(1); // Exit if we can't connect/subscribe
+    }
 }
 
 // --- Manejo de Cierre Limpio ---
-function shutdownService(signal: string) {
+async function shutdownService(signal: string) {
     console.log(`\n[Service] Received ${signal}. Shutting down gracefully...`);
-    if (pollingTimer) {
-        clearInterval(pollingTimer);
-        console.log('[Polling] Polling stopped.');
+    if (isConsumerRunning) {
+        try {
+            await consumer.disconnect();
+            console.log('[Consumer] Kafka consumer disconnected.');
+        } catch (error) {
+            console.error('[Consumer] Error disconnecting Kafka consumer:', error);
+        } finally {
+             isConsumerRunning = false;
+        }
+    } else {
+         console.log('[Consumer] Consumer was not running, skipping disconnect.');
     }
-    // Añadir limpieza de conexiones (ej: Kafka, DB) ?
-    // await kafkaProducer.disconnect();
+
+    // Add any other cleanup needed (e.g., database connections)
+
     console.log('[Service] Shutdown complete. Exiting.');
     process.exit(0);
 }
