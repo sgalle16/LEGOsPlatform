@@ -1,5 +1,6 @@
 import { pool } from '../config/database';
 import type { ApiGatewayData, FirebaseDecodedToken, TicketValidationResult } from '../types';
+import logger from '../utils/logger';
 
 interface SaveDataArgs {
     initialData: ApiGatewayData;
@@ -17,7 +18,7 @@ export const saveValidationResult = async ({
     validationResult,
 }: SaveDataArgs): Promise<void> => {
     const client = await pool.connect(); // Obtener un cliente del pool
-    console.log('[DB Service] Attempting to save validation result...');
+    logger.info('[DB Service] Attempting to save validation result...');
 
     try {
         await client.query('BEGIN'); // Iniciar transacción
@@ -41,7 +42,7 @@ export const saveValidationResult = async ({
              // Esto no deberiaa pasar con ON CONFLICT...DO UPDATE, pero es una verificación extra
              throw new Error(`Failed to upsert user with UID: ${firebaseUser.uid}`);
         }
-        console.log(`[DB Service] User record ensured for UID: ${userResult.rows[0].firebase_uid}`);
+        logger.info(`[DB Service] User record ensured for UID: ${userResult.rows[0].firebase_uid}`);
 
 
         // --- Paso 2: Insertar Registro de Validación ---
@@ -73,25 +74,25 @@ export const saveValidationResult = async ({
         if (validationResultInsert.rowCount === 0) {
              throw new Error(`Failed to insert validation record for ticket: ${initialData.ticketNumber}`);
         }
-        console.log(`[DB Service] Ticket validation record inserted (ID: ${validationResultInsert.rows[0].validation_id}) for ticket: ${initialData.ticketNumber}`);
+        logger.info(`[DB Service] Ticket validation record inserted (ID: ${validationResultInsert.rows[0].validation_id}) for ticket: ${initialData.ticketNumber}`);
 
 
         // --- Confirmar Transacción ---
         await client.query('COMMIT');
-        console.log('[DB Service] Transaction committed successfully.');
+        logger.info('[DB Service] Transaction committed successfully.');
 
     } catch (error: any) {
-        console.error('[DB Service] Error during database operation, rolling back transaction:', error.message);
+        logger.error('[DB Service] Error during database operation, rolling back transaction:', error.message);
         try {
             await client.query('ROLLBACK'); // Intentar deshacer la transacción
-            console.log('[DB Service] Transaction rolled back.');
+            logger.info('[DB Service] Transaction rolled back.');
         } catch (rollbackError: any) {
-            console.error('[DB Service] Error rolling back transaction:', rollbackError.message);
+            logger.error('[DB Service] Error rolling back transaction:', rollbackError.message);
         }
         // Relanzar el error para que el proceso principal sepa que falló
         throw new Error(`Database operation failed: ${error.message}`);
     } finally {
         client.release(); // MUY IMPORTANTE: Liberar el cliente de vuelta al pool
-        console.log('[DB Service] Database client released.');
+        logger.info('[DB Service] Database client released.');
     }
 };

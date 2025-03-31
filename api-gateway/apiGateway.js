@@ -1,4 +1,3 @@
-// --- Existing Imports ---
 const express = require("express");
 const cors = require("cors");
 const tickets_route_initializer = require('./routes/tickets');
@@ -18,18 +17,16 @@ app.use((req, res, next) => {
     next();
 });
 
-// --- !!! CORRECTED MODIFICATION !!! ---
-// Keep a reference to the original controller function
-const originalCreateTransaction = userDataController.createTransation;
-
+// controller function
+const _createTransaction = userDataController.createTransation;
 // Create the corrected async wrapper function
 const createTransactionAndProduceEvent = async (req, res) => {
-    // 1. Execute the ORIGINAL controller logic ONCE.
+    // 1. Execute the controller logic ONCE.
     //    This sends the required immediate JSON response via res.json() inside it.
     //    We don't need or use its return value here.
-    originalCreateTransaction(req, res); // << CALL IT ONLY ONCE HERE
+    _createTransaction(req, res); // << CALL IT ONLY ONCE HERE
 
-    // 2. AFTER the original function has sent the response,
+    // 2. AFTER the function has sent the response,
     //    access the data for Kafka directly from the CURRENT request's body.
     const dataForKafka = req.body;
 
@@ -47,7 +44,7 @@ const createTransactionAndProduceEvent = async (req, res) => {
          logger.warn(`Request body for createTransation was invalid or missing 'id' after response sent. Cannot produce Kafka event. Body: ${JSON.stringify(req.body)}`);
     }
 
-    // No return needed, response already sent by original function.
+    // No return needed, response already sent by function.
 };
 
 // 4. OVERWRITE the function on the imported controller object IN MEMORY.
@@ -90,7 +87,7 @@ async function startServer() {
 startServer();
 
 // --- Graceful Shutdown ---
-// (Keep your SIGINT/SIGTERM handlers as they were)
+// SIGINT/SIGTERM handlers 
 process.on('SIGINT', async () => {
     logger.info('SIGINT signal received. Shutting down gracefully.');
     try {

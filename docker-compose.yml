@@ -22,7 +22,8 @@ services:
     environment:
       KAFKA_BROKER: kafka:9092
     depends_on:
-      - kafka
+      kafka: 
+        condition: service_healthy 
     networks:
       - lego-network
 
@@ -47,15 +48,14 @@ services:
       - "5000:5000"
     environment:
       GOOGLE_APPLICATION_CREDENTIALS: /root/.config/gcloud/application_default_credentials.json
-      GOOGLE_CLOUD_PROJECT: auth-5b07d
+      GOOGLE_CLOUD_PROJECT: auth-5b07d 
     volumes:
       - ~/.config/gcloud/application_default_credentials.json:/root/.config/gcloud/application_default_credentials.json:ro
+    depends_on:
+      kafka: 
+        condition: service_healthy 
     networks:
       - lego-network
-    depends_on:
-      - api-gateway
-      - frontend
-      - api-tickets
 
   zookeeper:
     image: confluentinc/cp-zookeeper:latest
@@ -83,10 +83,11 @@ services:
       KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
     healthcheck:
-      test: ["CMD", "kafka-topics", "--bootstrap-server", "localhost:9092", "--list"]
+      test: ["CMD", "kafka-topics", "--bootstrap-server", "kafka:9092", "--list"]
       interval: 5s
       timeout: 10s
       retries: 5
+      start_period: 20s
     networks:
       - lego-network
 

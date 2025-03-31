@@ -1,4 +1,4 @@
-const { Kafka } = require('kafkajs');
+const { Kafka, logLevel } = require('kafkajs');
 const logger = require('./utils/logger'); // Assuming your logger path is correct
 
 // --- Kafka Configuration ---
@@ -8,12 +8,9 @@ const CLIENT_ID = 'api-gateway-client';
 const kafka = new Kafka({
     clientId: CLIENT_ID,
     brokers: [KAFKA_BROKER],
-    // Consider adding retry logic here if needed
-    // retry: {
-    //   initialRetryTime: 300,
-    //   retries: 5
-    // },
-    logLevel: 4 // INFO level - Adjust as needed (e.g., 1 for ERROR, 2 for WARN)
+    logLevel: logLevel.INFO, // INFO level - Adjust as needed (ERROR, WARN, etc)
+    // retry logic for broker connection issues
+    retry: { initialRetryTime: 300, retries: 10, maxRetryTime: 30000, factor: 2 } 
 });
 
 const producer = kafka.producer();
